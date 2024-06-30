@@ -41,6 +41,7 @@ module.exports = grammar({
     top_level_statement: $ => choice(
       $.definition,
       $.asm_expr,
+      $.import_expr,
     ),
 
     //
@@ -226,6 +227,15 @@ module.exports = grammar({
       "asm", $.string_literal
     ),
 
+    import_expr: $ => seq(
+      optional(":"),
+      "import",
+      choice(
+        $.string_literal,
+        seq("\'", repeat(/([^'\\]|\\[^u]|\\u[0-9a-fA-F]+)/), "\'"),
+      ),
+    ),
+
     expr: $ => choice(
       seq("(", $.expr, ")"),
       $.literal,
@@ -278,9 +288,7 @@ module.exports = grammar({
     character_literal: $ => /\'([^\\]|\\[^u]|\\u[0-9a-fA-F]+)\'/,
 
     string_literal: $ => token(seq(
-      "\"",
-      repeat(/([^"\\]|\\[^u]|\\u[0-9a-fA-F]+)/),
-      "\""
+      "\"", repeat(/([^"\\]|\\[^u]|\\u[0-9a-fA-F]+)/), "\""
     )),
 
     bool_literal: $ => choice("true", "false"),
