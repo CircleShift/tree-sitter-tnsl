@@ -1,0 +1,67 @@
+================
+Declaration test
+================
+int i
+int j = 1
+/; main
+	int i
+	int j = 1
+;/
+----------------
+(top_level
+
+	(top_level_statement
+		(definition
+			(full_type (identifier))
+			(identifier)))
+
+	(top_level_statement
+		(definition
+			(full_type (identifier))
+			(identifier)
+			(expr
+				(literal
+					(numeric_literal)))))
+
+	(top_level_block
+		(function_inner (identifier)
+			(definition
+				(full_type (identifier))
+				(identifier))
+
+			(definition
+				(full_type (identifier))
+				(identifier)
+				(expr
+					(literal
+						(numeric_literal))))
+	))
+)
+
+======================
+Inner block definition
+======================
+/; main
+	/; if
+		int i
+		int j = 1
+	;/
+;/
+----------------------
+(top_level
+	(top_level_block
+		(function_inner (identifier)
+			(function_block
+				(if_block
+					(definition
+						(full_type (identifier))
+						(identifier))
+
+					(definition
+						(full_type (identifier))
+						(identifier)
+						(expr
+							(literal
+								(numeric_literal))))
+	))))
+)

@@ -1,5 +1,5 @@
-/; export module Compiler
-	/; export module Compiler
+/; main
+	/; if (true)
+		i = j + i
 	;/
-;; main (int a) [int]
 ;/
