@@ -103,6 +103,7 @@ module.exports = grammar({
     function_statement: $ => choice(
       $.definition,
       $.expr,
+      $.asm_expr,
       seq("return", $.expr)
     ),
 
@@ -240,8 +241,8 @@ module.exports = grammar({
       seq("(", $.expr, ")"),
       $.literal,
       $.identifier_expr,
-      $.asm_expr,
       $.post_expr,
+      $.import_expr,
       $.binary_expr,
       $.pre_expr,
     ),
