@@ -1,11 +1,18 @@
+
 module.exports = grammar({
   name: "TNSL",
 
   inline: $ => [
-    $.top_block_inner,
-    $.function_block_inner,
-    $.function_statement,
-    $.function_block_statement,
+    $.top_level_block,
+    $.method_block,
+    $.func_block,
+
+    $.func_stmt,
+    $.func_block_stmt,
+  ],
+
+  extras: $ => [
+    /[\s]/
   ],
 
   conflicts: $ => [
@@ -13,293 +20,270 @@ module.exports = grammar({
 
   rules: {
 
-    //
-    // Top level rules
-    //
-
     top_level: $ => repeat(choice(
-      $.top_level_statement,
-      $.top_level_block
+      $.top_level_block,
+      $.declaration,
+      $.asm,
+      $.include,
+      $.struct,
+      $.newline,
     )),
+
+    newline: $ => choice('\0', /[\r\n]+/),
 
     top_level_block: $ => seq(
-    "/;",
-    $.top_block_inner,
-    repeat(seq(
-      ";;",
-      $.top_block_inner
-    )),
-    ";/"
-    ),
-
-    top_block_inner: $ => choice(
-      $.function_inner,
-      // $.method_inner,
-      $.module_inner
-    ),
-
-    top_level_statement: $ => choice(
-      $.definition,
-      $.asm_expr,
-      $.import_expr,
-    ),
-
-    //
-    // Function rules
-    //
-
-    function_inner: $ => seq(
-      $.identifier,
-      optional(seq("(", optional($.param_list), ")")),
-      optional(seq("[", optional($.type_list), "]")),
-      repeat(choice(
-        $.function_statement,
-        $.function_block
-      ))
-    ),
-
-    function_block: $ => seq(
       "/;",
-      $.function_block_inner,
+      choice($.module, $.method, $.func),
       repeat(seq(
         ";;",
-        $.function_block_inner
+        choice($.module, $.method, $.func),
       )),
-      ";/"
+      ";/",
     ),
 
-    function_block_inner: $ => choice(
-      $.if_block,
-      $.loop_block,
-      //$.match_block,
-      //$.anonymous_function,
-    ),
-
-    if_block: $ => seq(
-      choice(
-        "else",
-        seq(
-          optional("else"),
-          "if",
-          optional(seq("(", optional($.statement_list), ")")),
-        )
-      ),
-      repeat(choice(
-        $.function_block_statement,
-        $.function_block
-      ))
-    ),
-
-    loop_block: $ => seq(
-      "loop",
-      optional(seq("(", optional($.statement_list), ")")),
-      optional(seq("[", optional($.statement_list), "]")),
-      repeat(choice(
-        $.function_block_statement,
-        $.function_block
-      ))
-    ),
-
-    function_statement: $ => choice(
-      $.definition,
-      $.expr,
-      $.asm_expr,
-      seq("return", $.expr)
-    ),
-
-    function_block_statement: $ => choice(
-      $.function_statement,
-      $.control_expr,
-    ),
-
-    //
-    // Module rules
-    //
-
-    module_inner: $ => seq(
+    module: $ => seq(
+      // First line
       optional("export"),
       "module",
       $.identifier,
+      $.newline,
+
       repeat(choice(
-        // $.top_level_statement,
-        $.top_level_block
-      ))
-    ),
-
-    //
-    // Types and lists
-    //
-
-    type_list: $ => seq(
-        $.full_type,
-        repeat(seq(",", $.full_type))
-    ),
-
-    full_type: $ => prec(3, seq(
-      repeat(choice(
-        "~",
-        "{}",
-        seq("{", $.integer, "}")
+        $.top_level_block,
+        $.declaration,
+        $.asm,
+        $.include,
+        $.struct,
+        $.newline,
       )),
-      $.identifier,
-      optional(seq("(", $.type_list, ")")),
-      optional("`")
-    )),
+    ),
 
-    param_list: $ => repeat1(seq(
-      $.full_type,
-      $.identifier,
-      repeat(seq(",", $.identifier)),
-    )),
+    method: $ => seq(
+      // First line
+      "method", alias($.identifier, $.user_type),
+      optional(seq("impl", $.identifier)),
 
-    statement_list: $ => prec(1, seq(
-      choice($.definition, $.expr),
+      optional(seq(
+        $.newline,
+        repeat($.method_block),
+      )),
+    ),
+
+    method_block: $ => seq(
+      "/;",
+      choice($.func, $.operator),
       repeat(seq(
-        ";",
-        choice($.definition, $.expr),
-      ))
+        ";;",
+        choice($.func, $.operator),
+      )),
+      ";/",
+    ),
+
+    struct: $ => seq(
+      "struct",
+      alias($.identifier, $.user_type),
+      optional(seq("(", $.type_list, ")")),
+      "{", $.param_list, "}",
+    ),
+
+    func: $ => seq(
+      // Declaration
+      $.identifier,
+      optional(seq("(", $.param_list, ")")),
+      optional(seq("[", $.type_list, "]")),
+
+      optional(seq(
+        $.newline,
+        repeat($.func_stmt),
+      )),
+    ),
+
+    operator: $ => seq(
+      "operator",
+      optional(seq("(", $.type, $.identifier, ")")),
+      "[", $.type, "]",
+
+      optional(seq(
+        $.newline,
+        repeat($.func_stmt),
+      )),
+    ),
+
+    func_stmt: $ => choice(
+      $.func_block,
+      $.declaration,
+      $.asm,
+      $.return,
+      $.expr,
+      $.newline,
+    ),
+
+    func_block_stmt: $ => choice(
+      $.control,
+      $.func_stmt,
+    ),
+
+    func_block: $ => seq(
+      "/;",
+      choice($.if, $.loop),
+      repeat(seq(
+        ";;",
+        choice($.if, $.loop),
+      )),
+      ";/",
+    ),
+
+    if: $ => prec.right(seq(
+      "if",
+      seq("(", $.expr_list, ")"),
+      optional(seq("[", $.type_list, "]")),
+
+      optional(seq(
+        $.newline,
+        repeat($.func_block_stmt),
+      )),
+
+      repeat(seq(
+        choice(
+          ";;",
+          seq(";/", optional($.newline), "/;"),
+        ),
+        $.else_if,
+      )),
+
+      optional(seq(
+        choice(
+          ";;",
+          seq(";/", optional($.newline), "/;"),
+        ),
+        $.else,
+      )),
     )),
+
+    else_if: $ => seq(
+      "else", "if",
+      seq("(", $.expr_list, ")"),
+
+      optional(seq(
+        $.newline,
+        repeat($.func_block_stmt),
+      )),
+    ),
+
+    else: $ => seq(
+      "else",
+
+      optional(seq(
+        $.newline,
+        repeat($.func_block_stmt),
+      )),
+    ),
+
+    loop: $ => seq(
+      "loop",
+      optional(seq("(", $.expr_list, ")")),
+      optional(seq("[", $.expr_list, "]")),
+
+      optional(seq(
+        $.newline,
+        repeat($.func_block_stmt),
+      )),
+    ),
 
     expr_list: $ => seq(
       $.expr,
-      repeat(seq(
-        ",",
-        $.expr
-      ))
+      repeat(seq(";", optional($.newline), $.expr)),
     ),
 
-    //
-    // Misc
-    //
-
-    definition: $ => seq(
-      $.full_type,
+    param_list: $ => seq(
+      $.type,
       $.identifier,
-      optional(seq(
-        "=",
-        $.expr
+      repeat(seq(",", optional($.newline), optional($.type), $.identifier)),
+    ),
+
+    type_list: $ => seq(
+      $.type,
+      repeat(seq(",", optional($.newline), $.type)),
+    ),
+
+    control: $ => seq(
+      /(continue|break)/,
+      optional($.integer),
+      $.newline,
+    ),
+
+    return: $ => seq(
+      "return",
+      optional($.expr),
+      $.newline,
+    ),
+
+    include: $ => seq(
+      optional(":"),
+      "include",
+      choice($.include_literal, $.string_literal),
+      $.newline,
+    ),
+
+    asm: $ => seq(
+      "asm",
+      $.string_literal,
+      $.newline,
+    ),
+
+    declaration: $ => seq(
+      $.type, $.identifier,
+      optional(seq("=", optional($.newline), $.expr)),
+
+      repeat(seq(
+        ",", optional($.newline),
+        $.identifier,
+        optional(seq("=", optional($.newline), $.expr)),
       )),
 
-      repeat(seq(
-        ",",
-        $.identifier,
-        optional(seq(
-          "=",
-          $.expr
-        ))
-      ))
+      $.newline,
     ),
 
-    binary_expr: $ => prec.right(choice(
-      // Assignment expansion
-      prec(3, seq($.expr, /[&|^+\-*/%]=/, $.expr)),
+    include_literal: $ => seq("\'", /([^\'\\]|\\[^u]|\\u[0-9a-fA-F]+)*/, "\'"),
+    string_literal: $ => seq("\"", /([^\"\\]|\\[^u]|\\u[0-9a-fA-F]+)*/, "\""),
+    integer: $ => /[0-9]+/,
 
-      // Boolean logic
-      prec(7, seq($.expr, /!?(&&|\|\||\^\^)/, $.expr)),
-      prec(6, seq($.expr, /(!|<|>)?==/, $.expr)),
-
-      // Bitwise
-      prec(8, seq($.expr, /!?(&|\||\^)/, $.expr)),
-      prec(8, seq($.expr, /(<<|>>)/, $.expr)),
-
-      // Comparison
-      prec(6, seq($.expr, /!?(<|>)/, $.expr)),
-
-      // Single character binary ops
-      prec(3, seq($.expr, "=", $.expr)),
-      prec(4, seq($.expr, /[+\-]/, $.expr)),
-      prec(5, seq($.expr, /[*/%]/, $.expr)),
-    )),
-
-    post_expr: $ => prec(1, choice(
-      seq($.expr, "++"),
-      seq($.expr, "--"),
-    )),
-
-    pre_expr: $ => prec(2, choice(
-      seq("++", $.expr),
-      seq("--", $.expr),
-      seq("!", $.expr),
-      seq("~", $.expr),
-      seq("-", $.expr),
-    )),
-
-    asm_expr: $ => seq(
-      "asm", $.string_literal
+    inbuilt_type: $ => choice(
+      /u?int(8|16|32|64)?/,
+      /float(32|64)?/,
+      "type",
+      "vect",
     ),
 
-    import_expr: $ => seq(
-      optional(":"),
-      "import",
+    type: $ => seq(
+      repeat(choice(
+        "~",
+        seq("{", $.integer, "}")
+      )),
+
       choice(
-        $.string_literal,
-        seq("\'", repeat(/([^'\\]|\\[^u]|\\u[0-9a-fA-F]+)/), "\'"),
+        seq(
+          "void",
+          optional(seq("(", $.type_list, ")")),
+          optional(seq("[", $.type_list, "]")),
+        ),
+        seq(
+          choice($.inbuilt_type, alias($.identifier, $.user_type)),
+          optional(seq("(", $.type_list, ")")),
+        ),
       ),
     ),
 
-    expr: $ => choice(
-      seq("(", $.expr, ")"),
-      $.literal,
-      $.identifier_expr,
-      $.post_expr,
-      $.import_expr,
-      $.binary_expr,
-      $.pre_expr,
-    ),
+    identifier: $ => /[^`!-@\[-^{-~\s][^!-/:-@\[-^{-~`\s]*/,
 
-    control_expr: $ => seq(
-      /(break|continue)/,
-      optional($.integer)
-    ),
+    //
+    // TODO: EXPRESSION
+    //
 
-    identifier: $ => /[^!-@\[-^{-~`\s][^!-/:-@\[-^{-~`\s]*/,
+    expr: $ => /a/,
 
-    identifier_expr: $ => prec.right(seq(
-      $.identifier,
-      optional(seq("(", $.expr_list, ")")),
-      repeat(choice(
-        seq("{", $.expr, "}"),
-        "`"
-      )),
 
-      repeat(prec.right(seq(
-        ".",
-        $.identifier,
-        optional(seq("(", $.expr_list, ")")),
-        repeat(choice(
-          seq("{", $.expr, "}"),
-          "`"
-        )),
-      ))),
-    )),
 
-    integer: $ => /[0-9]+/,
-
-    numeric_literal: $ => choice(
-      // Binary
-      /0[Bb][01]+(\.[01]+)?/,
-      // Octal
-      /0[Oo][0-7]+(\.[0-7]+)?/,
-      // Hex
-      /0[Xx][0-9a-fA-F]+(\.[0-9a-fA-F]+)?/,
-      // Decimal
-      /[0-9]+(\.[0-9]+)?/,
-    ),
-
-    character_literal: $ => /\'([^\\]|\\[^u]|\\u[0-9a-fA-F]+)\'/,
-
-    string_literal: $ => token(seq(
-      "\"", repeat(/([^"\\]|\\[^u]|\\u[0-9a-fA-F]+)/), "\""
-    )),
-
-    bool_literal: $ => choice("true", "false"),
-
-    literal: $ => choice(
-      $.bool_literal,
-      $.numeric_literal,
-      $.character_literal,
-      $.string_literal,
-    )
   }
 
 });

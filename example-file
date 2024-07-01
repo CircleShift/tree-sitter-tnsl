@@ -1,5 +1,2 @@
-/; main
-	/; if (true)
-		i = j + i
-	;/
+/; main (int argc, ~~uint8 argv) [int]
 ;/
