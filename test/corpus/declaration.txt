@@ -10,18 +10,16 @@ int j = 1
 ----------------
 (top_level
 
-	(top_level_statement
-		(definition
-			(full_type (identifier))
-			(identifier)))
+	(declaration
+		(type (inbuilt_type))
+		(identifier)
+		(newline))
 
-	(top_level_statement
-		(definition
-			(full_type (identifier))
-			(identifier)
-			(expr
-				(literal
-					(numeric_literal)))))
+	(declaration
+		(type (inbuilt_type))
+		(identifier)
+		(expr (numeric_literal))
+		(newline))
 
 	(top_level_block
 		(function_inner (identifier)

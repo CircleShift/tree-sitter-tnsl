@@ -1,2 +1,4 @@
+bool HAD_ERROR = false
+
 /; main (int argc, ~~uint8 argv) [int]
 ;/

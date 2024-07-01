@@ -1,6 +1,6 @@
 
 module.exports = grammar({
-  name: "TNSL",
+  name: "tnsl",
 
   inline: $ => [
     $.top_level_block,
@@ -9,6 +9,7 @@ module.exports = grammar({
 
     $.func_stmt,
     $.func_block_stmt,
+    $.id_val,
   ],
 
   extras: $ => [
@@ -16,6 +17,7 @@ module.exports = grammar({
   ],
 
   conflicts: $ => [
+    [$.type, $.expr],
   ],
 
   rules: {
@@ -24,7 +26,7 @@ module.exports = grammar({
       $.top_level_block,
       $.declaration,
       $.asm,
-      $.include,
+      $.import,
       $.struct,
       $.newline,
     )),
@@ -52,7 +54,7 @@ module.exports = grammar({
         $.top_level_block,
         $.declaration,
         $.asm,
-        $.include,
+        $.import,
         $.struct,
         $.newline,
       )),
@@ -125,15 +127,23 @@ module.exports = grammar({
 
     func_block: $ => seq(
       "/;",
-      choice($.if, $.loop),
+
+      choice(
+        $.if,
+        $.loop,
+      ),
+
       repeat(seq(
         ";;",
-        choice($.if, $.loop),
+        choice(
+          $.if,
+          $.loop,
+        ),
       )),
       ";/",
     ),
 
-    if: $ => prec.right(seq(
+    if: $ => prec.left(seq(
       "if",
       seq("(", $.expr_list, ")"),
       optional(seq("[", $.type_list, "]")),
@@ -144,18 +154,12 @@ module.exports = grammar({
       )),
 
       repeat(seq(
-        choice(
-          ";;",
-          seq(";/", optional($.newline), "/;"),
-        ),
+        choice(";;", seq(";/", optional($.newline), "/;")),
         $.else_if,
       )),
 
       optional(seq(
-        choice(
-          ";;",
-          seq(";/", optional($.newline), "/;"),
-        ),
+        choice(";;", seq(";/", optional($.newline), "/;")),
         $.else,
       )),
     )),
@@ -218,10 +222,10 @@ module.exports = grammar({
       $.newline,
     ),
 
-    include: $ => seq(
+    import: $ => seq(
       optional(":"),
-      "include",
-      choice($.include_literal, $.string_literal),
+      "import",
+      choice($.import_literal, $.string_literal),
       $.newline,
     ),
 
@@ -244,7 +248,7 @@ module.exports = grammar({
       $.newline,
     ),
 
-    include_literal: $ => seq("\'", /([^\'\\]|\\[^u]|\\u[0-9a-fA-F]+)*/, "\'"),
+    import_literal: $ => seq("\'", /([^\'\\]|\\[^u]|\\u[0-9a-fA-F]+)*/, "\'"),
     string_literal: $ => seq("\"", /([^\"\\]|\\[^u]|\\u[0-9a-fA-F]+)*/, "\""),
     integer: $ => /[0-9]+/,
 
@@ -253,6 +257,7 @@ module.exports = grammar({
       /float(32|64)?/,
       "type",
       "vect",
+      "bool"
     ),
 
     type: $ => seq(
@@ -268,7 +273,13 @@ module.exports = grammar({
           optional(seq("[", $.type_list, "]")),
         ),
         seq(
-          choice($.inbuilt_type, alias($.identifier, $.user_type)),
+          choice(
+            $.inbuilt_type,
+            seq(
+              repeat(seq($.identifier, ".")),
+              alias($.identifier, $.user_type),
+            ),
+          ),
           optional(seq("(", $.type_list, ")")),
         ),
       ),
@@ -280,7 +291,47 @@ module.exports = grammar({
     // TODO: EXPRESSION
     //
 
-    expr: $ => /a/,
+    numeric_literal: $ => choice(
+      /0[Bb][01]+(\.[01]+)?/,
+      /0[Oo][0-7]+(\.[0-7]+)?/,
+      /0[Xx][0-9a-fA-F]+(\.[0-9a-fA-F]+)?/,
+      /[0-9]+(\.[0-9]+)?/,
+    ),
+
+    char_literal: $ => seq("'", /([^\'\\]|\\[^u]|\\u[0-9a-fA-F])/, "'"),
+
+    bool_literal: $ => choice("true", "false"),
+
+    id_val: $ => prec.right(seq(
+      $.identifier,
+      repeat(choice(
+        "`",
+        seq("{", $.expr, "}"),
+        seq("(", $.expr_list, ")"),
+      )),
+    )),
+
+    expr: $ => choice(
+      seq("(", $.expr, ")"),
+      seq("{", $.expr_list, "}"),
+
+      prec.left(1, seq($.expr, /([&|^+\-*/%])?=/, $.expr)),
+      prec.right(2, seq($.expr, /!?(&&|\|\||\^\^)/, $.expr)),
+      prec.left(3, seq($.expr, /((!|<|>)?==|!?(<|>))/, $.expr)),
+      prec.left(5, seq($.expr, /[+\-]/, $.expr)),
+      prec.left(6, seq($.expr, /[*/%]/, $.expr)),
+      prec(7, seq("len", $.expr)),
+      prec(8, seq(choice("--", "++"), $.expr)),
+      prec(9, seq("~", $.expr)),
+      prec.right(10, seq($.expr, ".", $.id_val)),
+
+      $.string_literal,
+      $.char_literal,
+      $.numeric_literal,
+      $.bool_literal,
+
+      $.id_val,
+    ),
 
 
 
