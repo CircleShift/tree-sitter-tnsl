@@ -209,6 +209,7 @@ module.exports = grammar({
       prec.left(1, seq($.expr, /[&|^+\-*\/%]?=/, $.expr)),
       prec.left(2, seq($.expr, /!?(\&\&|\|\||\^\^)/, $.expr)),
       prec.left(3, seq($.expr, /((!|<|>)?==|!?(<|>))/, $.expr)),
+      prec.left(4, seq($.expr, /(!|!?[&|^]|<<|>>)/, $.expr)),
       prec.left(5, seq($.expr, choice("+", "-"), $.expr)),
       prec.left(6, seq($.expr, choice("*", "/", "%"), $.expr)),
       prec(7, seq("len", $.expr)),
