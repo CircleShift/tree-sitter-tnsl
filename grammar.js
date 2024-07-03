@@ -231,7 +231,7 @@ module.exports = grammar({
 
     import: $ => seq(optional(":"), "import", choice($.import_literal, $.string_literal)),
 
-    control: $ => seq(choice("continue", "break"), optional($.integer)),
+    control: $ => seq(choice("continue", "break"), optional(alias($.integer, $.numeric_literal))),
 
     return: $ => seq("return", optional($.expr)),
 
@@ -407,6 +407,8 @@ module.exports = grammar({
       $.char_literal,
       $.numeric_literal,
       $.bool_literal,
+      alias("self", $.self),
+      alias("null", $.null),
     ),
 
     doc_comment: _ => token(choice(
