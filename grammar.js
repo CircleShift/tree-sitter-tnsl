@@ -1,4 +1,3 @@
-
 module.exports = grammar({
   name: "tnsl",
 
@@ -7,6 +6,7 @@ module.exports = grammar({
 
     $._top_stmt, $._method_stmt,
     $._function_stmt, $._control_stmt,
+    $._list_stmt,
   ],
 
   extras: $ => [
@@ -17,6 +17,8 @@ module.exports = grammar({
 
   conflicts: $ => [
     [$.if, $.if],
+    [$.ident_val, $.type],
+    [$.expr, $.type],
   ],
 
   rules: {
@@ -31,6 +33,7 @@ module.exports = grammar({
       alias($._top_block, $.block),
       seq($.import, $.newline),
       seq($.asm, $.newline),
+      $.struct,
       seq($.declaration, $.newline),
     ),
 
@@ -116,6 +119,7 @@ module.exports = grammar({
       seq($.asm, $.newline),
       seq($.return, $.newline),
       seq($.declaration, $.newline),
+      seq($.expr, $.newline),
     ),
 
     _function_block: $ => seq(
@@ -136,8 +140,8 @@ module.exports = grammar({
 
     if: $ => prec.dynamic(0, seq(
       "if",
-      "(", $.expr_list, ")",
-      optional(seq("[", $.expr_list, "]")),
+      $.stmt_list,
+      optional($.output_list),
 
       optional(seq(
         $.newline,
@@ -151,7 +155,7 @@ module.exports = grammar({
     else_if: $ => seq(
       choice(seq(";/", "/;"), ";;"),
       "else", "if",
-      "(", $.expr_list, ")",
+      $.stmt_list,
 
       optional(seq(
         $.newline,
@@ -171,8 +175,8 @@ module.exports = grammar({
 
     loop: $ => seq(
       "loop",
-      optional(seq("(", $.expr_list, ")")),
-      optional(seq("[", $.expr_list, "]")),
+      optional($.stmt_list),
+      optional($.repeat_list),
 
       optional(seq(
         $.newline,
@@ -192,18 +196,31 @@ module.exports = grammar({
     declaration: $ => seq(
       $.type,
       $.identifier,
-      optional("="),
+      optional(seq("=", $.expr)),
 
       repeat(seq(
         ",",
         $.identifier,
-        optional("=")
+        optional(seq("=", $.expr)),
       )),
     ),
 
     expr: $ => choice(
       // TODO
-      "a"
+      prec.left(1, seq($.expr, /[&|^+\-*\/%]?=/, $.expr)),
+      prec.left(2, seq($.expr, /!?(\&\&|\|\||\^\^)/, $.expr)),
+      prec.left(3, seq($.expr, /((!|<|>)?==|!?(<|>))/, $.expr)),
+      prec.left(5, seq($.expr, choice("+", "-"), $.expr)),
+      prec.left(6, seq($.expr, choice("*", "/", "%"), $.expr)),
+      prec(7, seq("len", $.expr)),
+      prec(8, seq(choice("--", "++"), $.expr)),
+      prec(9, seq($.expr, choice("--", "++"))),
+      seq("~", $.expr),
+
+      $.ident_val,
+      $._literal,
+      $.compound_expr,
+      seq("(", $.expr, ")"),
     ),
 
     //
@@ -220,6 +237,31 @@ module.exports = grammar({
 
     identifier: _ => /[^`!-@\[-^{-~\s][^!-@\[-^{-~`\s]*/,
 
+    ident_val: $ => seq(
+      $.identifier,
+      repeat(choice(
+        "`",
+        $.call_expr,
+        $.index_expr,
+      )),
+
+      repeat(seq(
+        ".",
+        $.identifier,
+        repeat(choice(
+          "`",
+          $.call_expr,
+          $.index_expr,
+        )),
+      )),
+    ),
+
+    call_expr: $ => seq("(", optional(seq($.expr, repeat(seq(",", $.expr)))), ")"),
+
+    index_expr: $ => seq("{", $.expr, "}"),
+
+    compound_expr: $ => seq("{", $.expr, repeat(seq(",", $.expr)), "}"),
+
     type: $ => seq(
       repeat(choice(
         "~", seq("{", alias($.integer, $.numeric_literal), "}")
@@ -232,11 +274,24 @@ module.exports = grammar({
           optional(seq("[", optional($.type_list), "]")),
         ),
         seq(
-          choice($.builtin_type, alias($.identifier, $.user_type)),
+          choice(
+            $.builtin_type,
+            seq(
+              repeat(seq($.identifier, ".")),
+              alias($.identifier, $.user_type)
+            )
+          ),
           optional(seq("(", $.type_list, ")")),
           optional("`"),
         ),
       ),
+    ),
+
+    struct: $ => seq(
+      "struct",
+      field("name", $.identifier),
+      optional($.param_list),
+      $.data_list,
     ),
 
     //
@@ -256,6 +311,15 @@ module.exports = grammar({
       ")",
     ),
 
+    data_list: $ => seq(
+      "{",
+      optional(seq(
+        $.type, $.identifier,
+        repeat(seq(",", optional($.type), $.identifier)),
+      )),
+      "}",
+    ),
+
     output_list: $ => seq(
       "[",
       optional(seq(
@@ -264,8 +328,21 @@ module.exports = grammar({
       "]",
     ),
 
-    expr_list: $ => seq(
-      $.expr, repeat(seq(";", optional($.expr))),
+    stmt_list: $ => seq(
+      "(",
+      $._list_stmt, repeat(seq(";", optional($._list_stmt))),
+      ")",
+    ),
+
+    repeat_list: $ => seq(
+      "[",
+      $._list_stmt, repeat(seq(";", optional($._list_stmt))),
+      "]",
+    ),
+
+    _list_stmt: $ => choice(
+      $.declaration,
+      $.expr,
     ),
 
     //
@@ -300,10 +377,13 @@ module.exports = grammar({
       /[0-9]+(\.[0-9]+)?/,
     ),
 
+    bool_literal: _ => choice("true", "false"),
+
     _literal: $ => choice(
       $.string_literal,
       $.char_literal,
       $.numeric_literal,
+      $.bool_literal,
     ),
 
     doc_comment: _ => token(choice(
