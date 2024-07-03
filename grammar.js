@@ -360,11 +360,34 @@ module.exports = grammar({
 
     integer: _ => /[0-9]+/,
 
-    string_literal: _ => seq("\"", /([^\"\\]|\\[^u]|\\u[0-9A-Fa-f])*/, "\""),
+    escape: _ => token.immediate(prec(1, /(\\[^u]|\\u[0-9a-fA-F])/)),
 
-    import_literal: _ => seq("\'", /([^\"\\]|\\[^u]|\\u[0-9A-Fa-f])*/, "\'"),
+    string_literal: $ => seq(
+      "\"",
+      repeat(choice(
+        token.immediate(prec(1, /[^\"\\]+/)),
+        $.escape,
+      )),
+      "\""
+    ),
 
-    char_literal: _ => seq("\'", /([^\"\\]|\\[^u]|\\u[0-9A-Fa-f])/, "\'"),
+    import_literal: $ => seq(
+      "\'",
+      repeat(choice(
+        token.immediate(prec(1, /[^\'\\]+/)),
+        $.escape,
+      )),
+      "\'"
+    ),
+
+    char_literal: $ => seq(
+      "\'",
+      choice(
+        token.immediate(prec(1, /[^\'\\]/)),
+        $.escape,
+      ),
+      "\'"
+    ),
 
     numeric_literal: _ => choice(
       // Binary
