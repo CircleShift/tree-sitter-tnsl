@@ -17,7 +17,7 @@ module.exports = grammar({
 
   conflicts: $ => [
     [$.if, $.if],
-    [$.ident_val, $.type],
+    [$.pointer_val, $.type],
   ],
 
   rules: {
@@ -215,9 +215,9 @@ module.exports = grammar({
       prec(7, seq("len", $.expr)),
       prec(8, seq(choice("--", "++"), $.expr)),
       prec(9, seq($.expr, choice("--", "++"))),
-      prec(10, $.ident_val),
-      prec(10, seq($.expr, ".", $.ident_val)),
-      prec(11, seq("~", $.expr)),
+
+      $.pointer_val,
+      seq($.expr, ".", $.ident_val),
 
       $._literal,
       $.compound_expr,
@@ -237,6 +237,26 @@ module.exports = grammar({
     return: $ => seq("return", optional($.expr)),
 
     identifier: _ => /[^`!-@\[-^{-~\s][^!-@\[-^{-~`\s]*/,
+
+    pointer_val: $ => prec.right(seq(
+      optional("~"),
+      $.identifier,
+      repeat(choice(
+        "`",
+        $.call_expr,
+        $.index_expr,
+      )),
+
+      repeat(seq(
+        ".",
+        $.identifier,
+        repeat(choice(
+          "`",
+          $.call_expr,
+          $.index_expr,
+        )),
+      )),
+    )),
 
     ident_val: $ => prec.right(seq(
       $.identifier,
