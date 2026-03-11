@@ -1,451 +1,468 @@
+/**
+ * @file TNSL Language Parser
+ * @author Kai Gunger <kgunger@gmail.com>
+ * @license MIT
+ */
+
+/// <reference types="tree-sitter-cli/dsl" />
+// @ts-check
+
+// Whitespace and newlines
+const NL = new RustRegex("[\\r\\n]");
+const NL_ = new RustRegex("[\\s]+");
+const _NL = optional(NL_);
+const WS = new RustRegex("[\\s&&[^\\r\\n]]");
+const BLOCK_SEP = choice(";;", seq( ";/", _NL, "/;" ));
+
+// Used when defining identifiers
+const ANTI_RESERVED = '[^`~!@#$%^&*()\\-=+\\[\\]{}\\\\|;:\'",<.>/?]';
+
 module.exports = grammar({
   name: "tnsl",
 
-  inline: $ => [
-    $._literal,
-
-    $._top_stmt, $._method_stmt,
-    $._function_stmt, $._control_stmt,
-    $._list_stmt,
-  ],
-
-  extras: $ => [
-    $.doc_comment,
-    $.comment,
-    /[\s]/,
-  ],
+  extras: $ => [WS],
 
   conflicts: $ => [
-    [$.if, $.if],
-    [$.pointer_val, $.type],
+    [$._type_prefix, $.pre_op],
+    [$.value, $.identifier_qualified],
+    [$._type_prefix_array, $.value_list],
   ],
 
   rules: {
+    // TODO: add the actual grammar rules
 
-    //
-    // Top level
-    //
+    // ====================
+    // Top level constructs
+    // ====================
 
-    top_level: $ => repeat($._top_stmt),
+    source_file: $ => repeat($._mod_stmt),
 
-    _top_stmt: $ => choice(
-      alias($._top_block, $.block),
-      seq($.import, $.newline),
-      seq($.asm, $.newline),
+    _mod_stmt: $ => choice(
+      NL_,
+
       $.struct,
-      seq($.declaration, $.newline),
+      $.enum_def,
+      $.import_file,
+      $.asm,
+      $.definition,
+
+      $.mod_block,
     ),
 
-    _top_block: $ => seq(
-      field("open", "/;"),
-      choice($.module, $.method, $.function),
-
-      repeat(seq(
-        field("reopen", ";;"),
-        choice($.module, $.method, $.function)
-      )),
-
-      field("close", ";/"),
+    mod_head: $ => seq(
+      optional("export"), "module", $.identifier,
     ),
 
-    //
-    // Module
-    //
+    mod_body: $ => seq(
+      NL, repeat($._mod_stmt),
+    ),
 
     module: $ => seq(
-      optional("export"),
-      "module",
-      $.identifier,
-
-      optional(seq(
-        $.newline,
-        repeat($._top_stmt),
-      )),
+      $.mod_head, optional($.mod_body),
     ),
 
-    //
-    // Method
-    //
-
-    method: $ => seq(
-      "method",
-      choice($.builtin_type, alias($.identifier, $.user_type)),
-      optional(seq(
-        "impl",
-        alias($.identifier, $.user_type),
-        repeat(seq(",", alias($.identifier, $.user_type))),
+    mod_block: $ => seq(
+      "/;", $._mod_block_inner,
+      repeat(seq(
+        ";;", $._mod_block_inner,
       )),
-
-      optional(seq(
-        $.newline,
-        repeat($._method_stmt),
-      )),
+      ";/",
     ),
+
+    _mod_block_inner: $ => choice(
+      // Function definition
+      $.function_def,
+      // Sub-module
+      $.module,
+      // Method definition
+      $.method,
+    ),
+
+    // =================
+    // Method definition
+    // =================
 
     _method_stmt: $ => choice(
-      alias($._method_block, $.block),
+      NL_,
+
+      $._method_block,
+    ),
+
+    method_head: $ => seq(
+      "method", $.identifier_qualified,
+    ),
+
+    method_body: $ => seq(
+      NL, repeat($._method_stmt),
+    ),
+
+    method: $ => seq(
+      $.method_head, optional($.method_body),
     ),
 
     _method_block: $ => seq(
-      field("open", "/;"),
-      choice($.function),
-
+      "/;", $._method_block_inner,
       repeat(seq(
-        field("reopen", ";;"),
-        choice($.function)
+        ";;", $._method_block_inner,
       )),
-
-      field("close", ";/"),
+      ";/",
     ),
 
-    //
-    // Functions
-    //
-
-    function: $ => seq(
-      field("name", $.identifier),
-      optional($.param_list),
-      optional($.output_list),
-
-      optional(seq(
-        $.newline,
-        repeat($._function_stmt),
-      )),
+    _method_block_inner: $ => choice(
+      $.function_def,
+      $._operator_function
     ),
 
-    _function_stmt: $ => choice(
-      alias($._function_block, $.block),
-      seq($.asm, $.newline),
-      seq($.return, $.newline),
-      seq($.declaration, $.newline),
-      seq($.expr, $.newline),
+    _operator_function: $ => seq(
+      "operator", _NL
     ),
 
-    _function_block: $ => seq(
-      field("open", "/;"),
-      choice($.if, $.loop),
-
-      repeat(seq(
-        field("reopen", ";;"),
-        choice($.if, $.loop)
-      )),
-
-      field("close", ";/"),
-    ),
-
-    //
-    // Control flow blocks
-    //
-
-    if: $ => prec.dynamic(0, seq(
-      "if",
-      $.stmt_list,
-      optional($.output_list),
-
-      optional(seq(
-        $.newline,
-        repeat($._control_stmt),
-      )),
-
-      optional(repeat($.else_if)),
-      optional($.else),
-    )),
-
-    else_if: $ => seq(
-      choice(seq(";/", "/;"), ";;"),
-      "else", "if",
-      $.stmt_list,
-
-      optional(seq(
-        $.newline,
-        repeat($._control_stmt),
-      )),
-    ),
-
-    else: $ => seq(
-      choice(seq(";/", "/;"), ";;"),
-      "else",
-
-      optional(seq(
-        $.newline,
-        repeat($._control_stmt),
-      )),
-    ),
-
-    loop: $ => seq(
-      "loop",
-      optional($.stmt_list),
-      optional($.repeat_list),
-
-      optional(seq(
-        $.newline,
-        repeat($._control_stmt),
-      )),
-    ),
-
-    _control_stmt: $ => choice(
-      seq($.control, $.newline),
-      $._function_stmt,
-    ),
-
-    //
-    // Declarations and expressions
-    //
-
-    declaration: $ => seq(
-      $.type,
-      $.identifier,
-      optional(seq("=", $.expr)),
-
-      repeat(seq(
-        ",",
-        $.identifier,
-        optional(seq("=", $.expr)),
-      )),
-    ),
-
-    expr: $ => choice(
-      // TODO
-      prec.left(1, seq($.expr, /[&|^+\-*\/%]?=/, $.expr)),
-      prec.left(2, seq($.expr, /!?(\&\&|\|\||\^\^)/, $.expr)),
-      prec.left(3, seq($.expr, /((!|<|>)?==|!?(<|>))/, $.expr)),
-      prec.left(4, seq($.expr, /(!|!?[&|^]|<<|>>)/, $.expr)),
-      prec.left(5, seq($.expr, choice("+", "-"), $.expr)),
-      prec.left(6, seq($.expr, choice("*", "/", "%"), $.expr)),
-      prec(7, seq("len", $.expr)),
-      prec(8, seq(choice("--", "++"), $.expr)),
-      prec(9, seq($.expr, choice("--", "++"))),
-
-      $.pointer_val,
-      seq($.expr, ".", $.ident_val),
-
-      $._literal,
-      $.compound_expr,
-      seq("(", $.expr, ")"),
-    ),
-
-    //
-    // Special statements
-    //
-
-    asm: $ => seq("asm", $.string_literal),
-
-    import: $ => seq(optional(":"), "import", choice($.import_literal, $.string_literal)),
-
-    control: $ => seq(choice("continue", "break"), optional(alias($.integer, $.numeric_literal))),
-
-    return: $ => seq("return", optional($.expr)),
-
-    identifier: _ => /[^`!-@\[-^{-~\s][^!-@\[-^{-~`\s]*/,
-
-    pointer_val: $ => prec.right(seq(
-      optional("~"),
-      $.identifier,
-      repeat(choice(
-        "`",
-        $.call_expr,
-        $.index_expr,
-      )),
-
-      repeat(seq(
-        ".",
-        $.identifier,
-        repeat(choice(
-          "`",
-          $.call_expr,
-          $.index_expr,
-        )),
-      )),
-    )),
-
-    ident_val: $ => prec.right(seq(
-      $.identifier,
-      repeat(choice(
-        "`",
-        $.call_expr,
-        $.index_expr,
-      )),
-
-      repeat(seq(
-        ".",
-        $.identifier,
-        repeat(choice(
-          "`",
-          $.call_expr,
-          $.index_expr,
-        )),
-      )),
-    )),
-
-    call_expr: $ => seq("(", optional(seq($.expr, repeat(seq(",", $.expr)))), ")"),
-
-    index_expr: $ => seq("{", $.expr, "}"),
-
-    compound_expr: $ => seq("{", $.expr, repeat(seq(",", $.expr)), "}"),
-
-    type: $ => seq(
-      repeat(choice(
-        "~", seq("{", alias($.integer, $.numeric_literal), "}")
-      )),
-
-      choice(
-        seq(
-          alias("void", $.builtin_type),
-          optional(seq("(", optional($.type_list), ")")),
-          optional(seq("[", optional($.type_list), "]")),
-        ),
-        seq(
-          choice(
-            $.builtin_type,
-            seq(
-              repeat(seq($.identifier, ".")),
-              alias($.identifier, $.user_type)
-            )
-          ),
-          optional(seq("(", $.type_list, ")")),
-          optional("`"),
-        ),
-      ),
-    ),
+    // =================
+    // Struct definition
+    // =================
 
     struct: $ => seq(
-      "struct",
-      field("name", $.identifier),
-      optional($.param_list),
-      $.data_list,
+      "struct", $.identifier, _NL, optional($.parameter_list), _NL, $.struct_def_list
     ),
 
-    //
-    // Lists
-    //
-
-    type_list: $ => seq(
-      $.type, repeat(seq(",", $.type)),
-    ),
-
-    param_list: $ => seq(
-      "(",
-      optional(seq(
-        $.type, $.identifier,
-        repeat(seq(",", optional($.type), $.identifier)),
-      )),
-      ")",
-    ),
-
-    data_list: $ => seq(
+    struct_def_list: $ => seq(
       "{",
       optional(seq(
-        $.type, $.identifier,
-        repeat(seq(",", optional($.type), $.identifier)),
+        _NL, $.type, _NL, $.identifier,
+        repeat(seq(
+          _NL, ",", _NL, optional($.type), _NL, $.identifier,
+        )),
       )),
-      "}",
+      _NL, "}",
     ),
 
-    output_list: $ => seq(
+    // ===============
+    // Enum definition
+    // ===============
+
+    enum_def: $ => seq(
+      "enum", $.identifier, _NL, optional($.type_list), _NL, $.enum_def_list
+    ),
+
+    enum_def_list: $ => seq(
+      "{",
+      optional(seq(
+        _NL, $.identifier, optional(seq(_NL, "=", _NL, $.value)),
+        repeat(seq(
+          _NL, ",", _NL, $.identifier, optional(seq(_NL, "=", _NL, $.value)),
+        )),
+      )),
+      _NL, "}",
+    ),
+
+    // ===================
+    // Function definition
+    // ===================
+
+    _func_stmt: $ => choice(
+      NL_,
+
+      seq($._stmt, NL),
+
+      seq($._func_block, NL),
+    ),
+
+    func_head: $ => seq(
+      $.identifier, _NL, optional($.parameter_list), _NL, optional(seq(optional("yield"), _NL, $.type_list)),
+    ),
+
+    func_body: $ => seq(
+      NL, repeat($._func_stmt),
+    ),
+
+    function_def: $ => seq(
+      $.func_head, optional($.func_body),
+    ),
+
+    _func_block: $ => seq(
+      "/;", $._func_block_inner,
+      repeat(seq(
+        ";;", $._func_block_inner,
+      )),
+      ";/",
+    ),
+
+    _func_block_inner: $ => choice(
+      $.if_block,
+      $.loop_block,
+      $.function_def,
+      // Not yet defined
+      // $.match_block,
+      // $.anonymous_function
+    ),
+
+    // Control Flow - IF
+
+    if_head: $ => seq(
+      "if", $.start_stmt_list,
+    ),
+
+    else_if_head: $ => seq(
+      "else", $.if_head,
+    ),
+
+    else_head: $ => seq(
+      "else",
+    ),
+
+    if_block: $ => prec.right(1, seq(
+      $.if_head, optional($.func_body),
+
+      repeat(seq(
+        BLOCK_SEP, $.else_if_head, optional($.func_body),
+      )),
+
+      optional(seq(
+        BLOCK_SEP, $.else_head, optional($.func_body),
+      ))
+    )),
+
+    // Control Flow - LOOP
+
+    loop_head: $ => seq(
+      "loop", optional($.start_stmt_list), optional($.end_stmt_list)
+    ),
+
+    loop_block: $ => seq(
+      $.loop_head, optional($.func_body),
+    ),
+
+    // Control Flow - MATCH
+
+    // TODO
+
+    // Control Flow - Stmt lists
+
+    start_stmt_list: $ => seq(
+      "(",
+      repeat(seq(_NL, $._stmt, ";")),
+      optional(seq(_NL, $._stmt)),
+      _NL, ")"
+    ),
+
+    end_stmt_list: $ => seq(
+      "[",
+      repeat(seq(_NL, $._stmt, ";")),
+      optional(seq(_NL, $._stmt)),
+      _NL, "]"
+    ),
+
+    // ===========
+    // Definitions
+    // ===========
+
+    definition: $ => seq(
+      $.type,
+
+      $.identifier,
+      optional(seq(
+        "=", _NL, $.value,
+      )),
+
+      repeat(seq(
+        ",", _NL, $.identifier,
+        optional(seq(
+          "=", _NL, $.value,
+        ))
+      ))
+    ),
+
+    // =====
+    // Lists
+    // =====
+
+    parameter_list: $ => seq(
+      "(",
+      optional(seq(
+        _NL, $.type, _NL, $.identifier,
+        repeat(seq(
+          _NL, ",", _NL, optional($.type), _NL, $.identifier,
+        )),
+      )),
+      _NL, ")",
+    ),
+
+    type_list: $ => seq(
       "[",
       optional(seq(
-        $.type, repeat(seq(",", $.type)),
+        _NL, $.type,
+        repeat(seq(
+          _NL, ",",
+          _NL, $.type,
+        )),
       )),
-      "]",
+      _NL, "]",
     ),
 
-    stmt_list: $ => seq(
+    value_list: $ => seq(
+      "{",
+      optional(seq(
+        _NL, $.value,
+        repeat(seq(
+          _NL, ",", _NL, $.value,
+        )),
+      )),
+      _NL, "}"
+    ),
+
+    call_list: $ => seq(
       "(",
-      $._list_stmt, repeat(seq(";", optional($._list_stmt))),
-      ")",
+      optional(seq(
+        _NL, $.value,
+        repeat(seq(
+          _NL, ",", _NL, $.value,
+        )),
+      )),
+      _NL, ")"
     ),
 
-    repeat_list: $ => seq(
-      "[",
-      $._list_stmt, repeat(seq(";", optional($._list_stmt))),
-      "]",
+    // =====
+    // Types
+    // =====
+
+    _type_prefix_array: $ => seq(
+      "{",
+      optional(seq(_NL, $.value)),
+      _NL, "}"
     ),
 
-    _list_stmt: $ => choice(
-      $.declaration,
-      $.expr,
+    _type_prefix: $ => choice(
+      "~", $._type_prefix_array,
     ),
 
-    //
-    // Misc
-    //
-
-    builtin_type: _ => choice(
-      "int", "int8", "int16", "int32", "int64",
-      "uint", "uint8", "uint16", "uint32", "uint64",
-      "float", "float32", "float64",
-      "bool", "vect", "type"
+    _type_postfix: _ => choice(
+      "`",
     ),
 
-    newline: _ => choice('\0', /[\r\n]+/),
+    type: $ => prec.right(1, seq(
+      repeat($._type_prefix),
+      choice(
+        seq($.identifier_qualified, optional($.call_list)),
+        seq("void", optional($.call_list), optional($.type_list)),
+        seq("yield", $.type_list)
+      ),
+      repeat($._type_postfix),
+    )),
 
-    integer: _ => /[0-9]+/,
+    // ======
+    // Values
+    // ======
 
-    escape: _ => token.immediate(prec(1, /(\\[^u]|\\u[0-9a-fA-F])/)),
+    identifier: _ => new RustRegex(`[\\S&&${ANTI_RESERVED}&&[^0-9]][\\S&&${ANTI_RESERVED}]*`),
 
-    string_literal: $ => seq(
+    identifier_qualified: $ => prec.right(1, seq(
+      $.identifier, repeat(seq(".", _NL, $.identifier)),
+    )),
+
+    escape: _ => new RustRegex("\\\\[^u]|\\\\u[0-9a-fA-F]+"),
+
+    string: $ => seq(
       "\"",
       repeat(choice(
-        token.immediate(prec(1, /[^\"\\]+/)),
+        new RustRegex('[^"\\\\]'),
         $.escape,
       )),
-      "\""
+      "\"",
     ),
 
-    import_literal: $ => seq(
+    import_string: $ => seq(
       "\'",
       repeat(choice(
-        token.immediate(prec(1, /[^\'\\]+/)),
+        new RustRegex("[^'\\\\]"),
         $.escape,
       )),
-      "\'"
+      "\'",
     ),
 
-    char_literal: $ => seq(
+    character: $ => seq(
       "\'",
       choice(
-        token.immediate(prec(1, /[^\'\\]/)),
+        new RustRegex("[^'\\\\]"),
         $.escape,
       ),
-      "\'"
+      "\'",
     ),
 
-    numeric_literal: _ => choice(
-      // Binary
-      /0[Bb][01]+/,
-      // Octal
-      /0[Oo][0-7]+(\.[0-7]+)?/,
-      // Hex
-      /0[Xx][0-9a-fA-F]+(\.[0-9a-fA-F]+)?/,
-      // Decimal
-      /[0-9]+(\.[0-9]+)?/,
+    _binary_literal: $ => new RustRegex("0b[01]+(\\.[01]+)?"),
+    _octal_literal: $ => new RustRegex("0o[0-7]+(\\.[0-7]+)?"),
+    _decimal_literal: $ => new RustRegex("[0-9]+(\\.[0-9]+)?"),
+    _hex_literal: $ => new RustRegex("0x[0-9a-fA-F]+(\\.[0-9a-fA-F]+)?"),
+
+    numeric_literal: $ => choice(
+      $._binary_literal,
+      $._octal_literal,
+      $._hex_literal,
+      $._decimal_literal,
     ),
 
-    bool_literal: _ => choice("true", "false"),
-
-    _literal: $ => choice(
-      $.string_literal,
-      $.char_literal,
+    _literal_value: $ => choice(
       $.numeric_literal,
-      $.bool_literal,
-      alias("null", $.null),
-      alias("self", $.self),
+      $.string,
+      $.character,
+      $.value_list,
     ),
 
-    doc_comment: _ => token(choice(
-      seq("##", /.*/),
-      seq(
-        "/##", /([^#]|#([\r\n]+|[^\/][^\r\n]*))*/, "#/"
-      ),
-    )),
+    post_op: $ => choice(
+      "`", "++", "--",
+      // Get operation
+      seq(".", _NL, $.identifier),
+      // Index operation
+      seq("{", $.value, "}"),
+    ),
 
-    comment: _ => token(choice(
-      seq("#", /.*/),
-      seq(
-        "/#", /([^#]|#([\r\n]+|[^\/][^\r\n]*))*/, "#/"
-      ),
-    )),
+    pre_op: _ => choice(
+      "~", "-", "!", "len", "++", "--",
+    ),
 
+    bin_op: _ => choice(
+      "<<", ">>",
+      "*", "/", "%",
+      "+", "-",
+      "&", "|", "^", "!&", "!|", "!^",
+      "==", "<", ">", "<==", ">==", "!==", "!<", "!>",
+      "&&", "||", "^^", "!&&", "!||", "!^^",
+      "=", "~=", "*=", "/=", "%=", "+=", "-=", "&=", "|=", "^=",
+    ),
+
+    value: $ => choice(
+      $._literal_value,
+      $.identifier,
+      seq($.value, $.call_list),
+      prec(3, seq($.value, $.post_op)),
+      prec(2, seq($.pre_op, $.value)),
+      prec.left(1, seq($.value, $.bin_op, $.value)),
+      prec(1, $.type),
+    ),
+
+    // ====
+    // Stmt
+    // ====
+
+    control: $ => choice(
+      seq("return", $.value),
+      seq("yield", optional($.value)),
+      seq("break", optional($.value)),
+      seq("continue", optional($.value)),
+    ),
+
+    _stmt: $ => choice(
+      NL,
+      $.definition,
+      $.value,
+      $.control,
+    ),
+
+    // =====
+    // Extra
+    // =====
+
+    asm: $ => seq("asm", $.string),
+
+    import_file: $ => seq(optional(":"), "import", choice($.string, $.import_string)),
   }
-
 });
