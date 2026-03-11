@@ -9,7 +9,7 @@
 
 // Whitespace and newlines
 const NL = new RustRegex("[\\r\\n]");
-const NL_ = new RustRegex("[\\s]+");
+const NL_ = new RustRegex("[\\r\\n]+");
 const _NL = optional(NL_);
 const WS = new RustRegex("[\\s&&[^\\r\\n]]");
 const BLOCK_SEP = choice(";;", seq( ";/", _NL, "/;" ));
@@ -26,6 +26,7 @@ module.exports = grammar({
     [$._type_prefix, $.pre_op],
     [$.value, $.identifier_qualified],
     [$._type_prefix_array, $.value_list],
+    [$.if_block, $.if_block],
   ],
 
   rules: {
@@ -35,7 +36,7 @@ module.exports = grammar({
     // Top level constructs
     // ====================
 
-    source_file: $ => repeat($._mod_stmt),
+    source: $ => repeat($._mod_stmt),
 
     _mod_stmt: $ => choice(
       NL_,
@@ -126,14 +127,14 @@ module.exports = grammar({
     ),
 
     struct_def_list: $ => seq(
-      "{",
+      "{", _NL,
       optional(seq(
-        _NL, $.type, _NL, $.identifier,
+        $.type, _NL, $.identifier, _NL,
         repeat(seq(
-          _NL, ",", _NL, optional($.type), _NL, $.identifier,
+          ",", _NL, optional($.type), _NL, $.identifier, _NL
         )),
       )),
-      _NL, "}",
+      "}",
     ),
 
     // ===============
@@ -145,14 +146,14 @@ module.exports = grammar({
     ),
 
     enum_def_list: $ => seq(
-      "{",
+      "{", _NL,
       optional(seq(
-        _NL, $.identifier, optional(seq(_NL, "=", _NL, $.value)),
+        $.identifier, optional(seq(_NL, "=", _NL, $.value)), _NL,
         repeat(seq(
-          _NL, ",", _NL, $.identifier, optional(seq(_NL, "=", _NL, $.value)),
+          ",", _NL, $.identifier, optional(seq(_NL, "=", _NL, $.value)), _NL,
         )),
       )),
-      _NL, "}",
+      "}",
     ),
 
     // ===================
@@ -168,7 +169,7 @@ module.exports = grammar({
     ),
 
     func_head: $ => seq(
-      $.identifier, _NL, optional($.parameter_list), _NL, optional(seq(optional("yield"), _NL, $.type_list)),
+      $.identifier, optional($.parameter_list), optional($.type_list),
     ),
 
     func_body: $ => seq(
@@ -210,7 +211,7 @@ module.exports = grammar({
       "else",
     ),
 
-    if_block: $ => prec.right(1, seq(
+    if_block: $ => seq(
       $.if_head, optional($.func_body),
 
       repeat(seq(
@@ -220,7 +221,7 @@ module.exports = grammar({
       optional(seq(
         BLOCK_SEP, $.else_head, optional($.func_body),
       ))
-    )),
+    ),
 
     // Control Flow - LOOP
 
@@ -239,17 +240,17 @@ module.exports = grammar({
     // Control Flow - Stmt lists
 
     start_stmt_list: $ => seq(
-      "(",
-      repeat(seq(_NL, $._stmt, ";")),
-      optional(seq(_NL, $._stmt)),
-      _NL, ")"
+      "(", _NL,
+      repeat(seq($._stmt, _NL, ";", _NL)),
+      optional(seq($._stmt, _NL)),
+      ")"
     ),
 
     end_stmt_list: $ => seq(
-      "[",
-      repeat(seq(_NL, $._stmt, ";")),
-      optional(seq(_NL, $._stmt)),
-      _NL, "]"
+      "[", _NL,
+      repeat(seq($._stmt, _NL, ";", _NL)),
+      optional(seq($._stmt, _NL)),
+      "]"
     ),
 
     // ===========
@@ -277,48 +278,47 @@ module.exports = grammar({
     // =====
 
     parameter_list: $ => seq(
-      "(",
+      "(", _NL,
       optional(seq(
-        _NL, $.type, _NL, $.identifier,
+        $.type, _NL, $.identifier, _NL,
         repeat(seq(
-          _NL, ",", _NL, optional($.type), _NL, $.identifier,
+          ",", _NL, optional($.type), _NL, $.identifier, _NL,
         )),
       )),
-      _NL, ")",
+      ")",
     ),
 
     type_list: $ => seq(
-      "[",
+      "[", _NL,
       optional(seq(
-        _NL, $.type,
+        $.type, _NL,
         repeat(seq(
-          _NL, ",",
-          _NL, $.type,
+          ",", _NL, $.type, _NL
         )),
       )),
-      _NL, "]",
+      "]",
     ),
 
     value_list: $ => seq(
-      "{",
+      "{", _NL,
       optional(seq(
-        _NL, $.value,
+        $.value, _NL,
         repeat(seq(
-          _NL, ",", _NL, $.value,
+          ",", _NL, $.value, _NL
         )),
       )),
-      _NL, "}"
+      "}"
     ),
 
     call_list: $ => seq(
-      "(",
+      "(", _NL,
       optional(seq(
-        _NL, $.value,
+        $.value, _NL,
         repeat(seq(
-          _NL, ",", _NL, $.value,
+          ",", _NL, $.value, _NL
         )),
       )),
-      _NL, ")"
+      ")"
     ),
 
     // =====
@@ -326,9 +326,9 @@ module.exports = grammar({
     // =====
 
     _type_prefix_array: $ => seq(
-      "{",
-      optional(seq(_NL, $.value)),
-      _NL, "}"
+      "{", _NL,
+      optional(seq($.value, _NL)),
+      "}"
     ),
 
     _type_prefix: $ => choice(
@@ -355,7 +355,7 @@ module.exports = grammar({
 
     identifier: _ => new RustRegex(`[\\S&&${ANTI_RESERVED}&&[^0-9]][\\S&&${ANTI_RESERVED}]*`),
 
-    identifier_qualified: $ => prec.right(1, seq(
+    identifier_qualified: $ => prec.right(seq(
       $.identifier, repeat(seq(".", _NL, $.identifier)),
     )),
 
@@ -455,6 +455,7 @@ module.exports = grammar({
       $.definition,
       $.value,
       $.control,
+      $.asm,
     ),
 
     // =====
