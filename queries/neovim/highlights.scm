@@ -20,15 +20,17 @@
 (type_prefix) @operator
 (type_postfix) @operator
 
+(call_list) @operator
+
 (identifier) @identifier
 (value (identifier)) @variable
 
 "true" @constant.builtin
 "false" @constant.builtin
 
-"if" @conditional
-"else" @conditional
-"loop" @repeat
+"if" @keyword.conditional
+"else" @keyword.conditional
+"loop" @keyword.repeat
 
 "continue" @keyword
 "break" @keyword
@@ -36,7 +38,7 @@
 "yield" @keyword.return
 
 "export" @keyword
-"module" @keyword
+"module" @keyword.modifier
 
 "method" @keyword
 

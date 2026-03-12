@@ -381,34 +381,9 @@ module.exports = grammar({
       repeat(seq($.identifier, ".", _NL)), field("name", $.identifier)
     )),
 
-    escape: _ => new RustRegex("\\\\[^u]|\\\\u[0-9a-fA-F]+"),
-
-    string: $ => seq(
-      "\"",
-      repeat(choice(
-        new RustRegex('[^"\\\\]'),
-        $.escape,
-      )),
-      "\"",
-    ),
-
-    import_string: $ => seq(
-      "\'",
-      repeat(choice(
-        new RustRegex("[^'\\\\]"),
-        $.escape,
-      )),
-      "\'",
-    ),
-
-    character: $ => seq(
-      "\'",
-      choice(
-        new RustRegex("[^'\\\\]"),
-        $.escape,
-      ),
-      "\'",
-    ),
+    string: _ => new RustRegex("(?m)\\\"([^\\\"\\\\]|\\\\[^u]|\\\\u[0-9a-fA-F]+)*\\\""),
+    import_string: _ => new RustRegex("(?m)'([^'\\\\]|\\\\[^u]|\\\\u[0-9a-fA-F]+)*'"),
+    character: _ => new RustRegex("(?m)'([^'\\\\]|\\\\[^u]|\\\\u[0-9a-fA-F]+)'"),
 
     _binary_literal: $ => new RustRegex("0b[01]+(\\.[01]+)?"),
     _octal_literal: $ => new RustRegex("0o[0-7]+(\\.[0-7]+)?"),
@@ -471,7 +446,7 @@ module.exports = grammar({
     // ====
 
     control: $ => choice(
-      seq("return", $.value),
+      seq("return", optional($.value)),
       seq("yield", optional($.value)),
       seq("break", optional($.value)),
       seq("continue", optional($.value)),
@@ -508,5 +483,5 @@ module.exports = grammar({
       )
     )),
 
-  }
+  },
 });
