@@ -438,8 +438,6 @@ module.exports = grammar({
 
     post_op: $ => choice(
       "`", "++", "--",
-      // Get operation
-      seq(".", _NL, $.identifier),
       // Index operation
       seq("{", $.value, "}"),
     ),
@@ -456,6 +454,7 @@ module.exports = grammar({
       "==", "<", ">", "<==", ">==", "!==", "!<", "!>",
       "&&", "||", "^^", "!&&", "!||", "!^^",
       "=", "~=", "*=", "/=", "%=", "+=", "-=", "&=", "|=", "^=",
+      "."
     ),
 
     value: $ => choice(
@@ -465,7 +464,6 @@ module.exports = grammar({
       prec(3, seq($.value, $.post_op)),
       prec(2, seq($.pre_op, $.value)),
       prec.left(1, seq($.value, $.bin_op, $.value)),
-      prec(1, $.type),
     ),
 
     // ====

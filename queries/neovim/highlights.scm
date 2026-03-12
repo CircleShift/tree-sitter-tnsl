@@ -9,24 +9,31 @@
 
 (bool) @boolean
 
-(null) @constant
-(self) @constant
+(null) @constant.builtin
+(self) @variable.builtin
+
+(func_head name: (identifier) @function)
+
+(pre_op) @operator
+(post_op) @operator
+(bin_op) @operator
+(type_prefix) @operator
+(type_postfix) @operator
 
 (identifier) @identifier
-(func_head name: (identifier) @function)
+(value (identifier)) @variable
+
+"true" @constant.builtin
+"false" @constant.builtin
 
 "if" @conditional
 "else" @conditional
 "loop" @repeat
 
-(pre_op) @operator
-(post_op) @operator
-(bin_op) @operator
-
 "continue" @keyword
 "break" @keyword
-"return" @keyword
-"yield" @keyword
+"return" @keyword.return
+"yield" @keyword.return
 
 "export" @keyword
 "module" @keyword
@@ -36,10 +43,9 @@
 "asm" @keyword
 
 (type name: (_) @type)
-(type (identifier_qualified name: (_) @type))
 (struct name: (identifier) @type)
 (enum name: (identifier) @type)
 
-"struct" @structure
-"enum" @structure
+"struct" @keyword.type
+"enum" @keyword.type
 
