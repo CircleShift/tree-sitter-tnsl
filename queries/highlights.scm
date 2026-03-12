@@ -1,38 +1,45 @@
-(identifier) @variable
+(comment) @comment
 
-"import" @keyword
-"asm" @keyword
+(string) @string
+(import_string) @string
+
+(character) @character
+
+(numeric_literal) @number
+
+(bool) @boolean
+
+(null) @constant
+(self) @constant
+
+(identifier) @identifier
+(func_head name: (identifier) @function)
+
+"if" @conditional
+"else" @conditional
+"loop" @repeat
+
+(pre_op) @operator
+(post_op) @operator
+(bin_op) @operator
 
 "continue" @keyword
 "break" @keyword
 "return" @keyword
-
-"len" @keyword
-
-"struct" @keyword
+"yield" @keyword
 
 "export" @keyword
 "module" @keyword
+
 "method" @keyword
-"impl" @keyword
 
-"if" @keyword
-"else" @keyword
-"loop" @keyword
+"asm" @keyword
 
+(type name: (_) @type)
+(type (identifier_qualified name: (_) @type))
+(struct name: (identifier) @type)
+(enum name: (identifier) @type)
 
-(builtin_type) @type
-(user_type) @type
+"struct" @structure
+"enum" @structure
 
-(string_literal) @string
-(import_literal) @string
-
-(null) @constant
-(self) @constant
-(bool_literal) @constant
-
-(numeric_literal) @number
-(char_literal) @number
-
-(comment) @comment
-(doc_comment) @comment

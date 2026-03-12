@@ -20,11 +20,11 @@ const ANTI_RESERVED = '[^`~!@#$%^&*()\\-=+\\[\\]{}\\\\|;:\'",<.>/?]';
 module.exports = grammar({
   name: "tnsl",
 
-  extras: $ => [WS],
+  extras: $ => [WS, $.comment],
 
   conflicts: $ => [
-    [$._type_prefix, $.pre_op],
-    [$.value, $.identifier_qualified],
+    [$.type_prefix, $.pre_op],
+    [$.value, $._identifier_qualified],
     [$._type_prefix_array, $.value_list],
     [$.if_block, $.if_block],
   ],
@@ -42,7 +42,7 @@ module.exports = grammar({
       NL_,
 
       $.struct,
-      $.enum_def,
+      $.enum,
       $.import_file,
       $.asm,
       $.definition,
@@ -51,14 +51,16 @@ module.exports = grammar({
     ),
 
     mod_head: $ => seq(
-      optional("export"), "module", $.identifier,
+      optional("export"),
+      "module",
+      field("name", $.identifier),
     ),
 
     mod_body: $ => seq(
       NL, repeat($._mod_stmt),
     ),
 
-    module: $ => seq(
+    mod: $ => seq(
       $.mod_head, optional($.mod_body),
     ),
 
@@ -72,9 +74,9 @@ module.exports = grammar({
 
     _mod_block_inner: $ => choice(
       // Function definition
-      $.function_def,
+      $.func,
       // Sub-module
-      $.module,
+      $.mod,
       // Method definition
       $.method,
     ),
@@ -86,11 +88,11 @@ module.exports = grammar({
     _method_stmt: $ => choice(
       NL_,
 
-      $._method_block,
+      $.method_block,
     ),
 
     method_head: $ => seq(
-      "method", $.identifier_qualified,
+      "method", alias($._identifier_qualified, $.type),
     ),
 
     method_body: $ => seq(
@@ -101,7 +103,7 @@ module.exports = grammar({
       $.method_head, optional($.method_body),
     ),
 
-    _method_block: $ => seq(
+    method_block: $ => seq(
       "/;", $._method_block_inner,
       repeat(seq(
         ";;", $._method_block_inner,
@@ -110,7 +112,7 @@ module.exports = grammar({
     ),
 
     _method_block_inner: $ => choice(
-      $.function_def,
+      $.func,
       $._operator_function
     ),
 
@@ -123,10 +125,13 @@ module.exports = grammar({
     // =================
 
     struct: $ => seq(
-      "struct", $.identifier, _NL, optional($.parameter_list), _NL, $.struct_def_list
+      "struct",
+      field("name", $.identifier), _NL,
+      optional($.parameter_list), _NL,
+      $.struct_data_list
     ),
 
-    struct_def_list: $ => seq(
+    struct_data_list: $ => seq(
       "{", _NL,
       optional(seq(
         $.type, _NL, $.identifier, _NL,
@@ -141,11 +146,14 @@ module.exports = grammar({
     // Enum definition
     // ===============
 
-    enum_def: $ => seq(
-      "enum", $.identifier, _NL, optional($.type_list), _NL, $.enum_def_list
+    enum: $ => seq(
+      "enum",
+      field("name", $.identifier), _NL,
+      optional($.type_list), _NL,
+      $.enum_list
     ),
 
-    enum_def_list: $ => seq(
+    enum_list: $ => seq(
       "{", _NL,
       optional(seq(
         $.identifier, optional(seq(_NL, "=", _NL, $.value)), _NL,
@@ -165,22 +173,24 @@ module.exports = grammar({
 
       seq($._stmt, NL),
 
-      seq($._func_block, NL),
+      seq($.func_block, NL),
     ),
 
     func_head: $ => seq(
-      $.identifier, optional($.parameter_list), optional($.type_list),
+      field("name", $.identifier),
+      optional($.parameter_list),
+      optional($.type_list),
     ),
 
     func_body: $ => seq(
       NL, repeat($._func_stmt),
     ),
 
-    function_def: $ => seq(
+    func: $ => seq(
       $.func_head, optional($.func_body),
     ),
 
-    _func_block: $ => seq(
+    func_block: $ => seq(
       "/;", $._func_block_inner,
       repeat(seq(
         ";;", $._func_block_inner,
@@ -191,7 +201,7 @@ module.exports = grammar({
     _func_block_inner: $ => choice(
       $.if_block,
       $.loop_block,
-      $.function_def,
+      $.func,
       // Not yet defined
       // $.match_block,
       // $.anonymous_function
@@ -331,22 +341,34 @@ module.exports = grammar({
       "}"
     ),
 
-    _type_prefix: $ => choice(
+    type_prefix: $ => choice(
       "~", $._type_prefix_array,
     ),
 
-    _type_postfix: _ => choice(
+    type_postfix: _ => choice(
       "`",
     ),
 
     type: $ => prec.right(1, seq(
-      repeat($._type_prefix),
+      repeat($.type_prefix),
       choice(
-        seq($.identifier_qualified, optional($.call_list)),
-        seq("void", optional($.call_list), optional($.type_list)),
-        seq("yield", $.type_list)
+        seq(
+          $._identifier_qualified,
+          optional($.call_list)
+        ),
+
+        seq(
+          field("name", alias("void", $.void)),
+          optional($.call_list),
+          optional($.type_list)
+        ),
+
+        seq(
+          field("name", alias("yield", $.yield)),
+          optional($.type_list)
+        ),
       ),
-      repeat($._type_postfix),
+      repeat($.type_postfix),
     )),
 
     // ======
@@ -355,8 +377,8 @@ module.exports = grammar({
 
     identifier: _ => new RustRegex(`[\\S&&${ANTI_RESERVED}&&[^0-9]][\\S&&${ANTI_RESERVED}]*`),
 
-    identifier_qualified: $ => prec.right(seq(
-      $.identifier, repeat(seq(".", _NL, $.identifier)),
+    _identifier_qualified: $ => prec.right(seq(
+      repeat(seq($.identifier, ".", _NL)), field("name", $.identifier)
     )),
 
     escape: _ => new RustRegex("\\\\[^u]|\\\\u[0-9a-fA-F]+"),
@@ -400,11 +422,18 @@ module.exports = grammar({
       $._decimal_literal,
     ),
 
+    bool: _ => choice("true", "false"),
+    "null": _ => "null",
+    "self": _ => "self",
+
     _literal_value: $ => choice(
       $.numeric_literal,
       $.string,
       $.character,
       $.value_list,
+      $.bool,
+      $.null,
+      $.self,
     ),
 
     post_op: $ => choice(
@@ -465,5 +494,21 @@ module.exports = grammar({
     asm: $ => seq("asm", $.string),
 
     import_file: $ => seq(optional(":"), "import", choice($.string, $.import_string)),
+
+    // =======
+    // Comment
+    // =======
+
+    // Stolen from:
+    // https://github.com/tree-sitter/tree-sitter-go/blob/2346a3ab1bb3857b48b29d779a1ef9799a248cd7/grammar.js#L926
+    comment: _ => token(choice(
+      seq('#', /.*/),
+      seq(
+        '/#',
+        /[^#]*#+([^/#][^#]*#+)*/,
+        '/',
+      )
+    )),
+
   }
 });
