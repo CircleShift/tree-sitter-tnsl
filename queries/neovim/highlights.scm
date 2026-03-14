@@ -24,6 +24,17 @@
 
 (identifier) @identifier
 (value (identifier)) @variable
+(parameter_list (identifier)) @variable
+(definition (identifier)) @variable
+
+
+(value (value
+	(identifier) @function)
+	(call_list))
+
+(value (value
+	(value (identifier) @function) .)
+	(call_list))
 
 "true" @constant.builtin
 "false" @constant.builtin
