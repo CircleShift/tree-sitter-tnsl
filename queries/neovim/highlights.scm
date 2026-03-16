@@ -52,6 +52,7 @@
 
 "export" @keyword
 "module" @keyword.modifier
+"import" @keyword.import
 
 "method" @keyword
 
