@@ -19,12 +19,14 @@
 (bin_op) @operator
 (type_prefix) @operator
 (type_postfix) @operator
+(type "." @operator)
 
 (call_list) @operator
 
 (identifier) @identifier
 (value (identifier)) @variable
 (parameter_list (identifier)) @variable
+(struct_data_list (identifier)) @variable
 (definition (identifier)) @variable
 
 

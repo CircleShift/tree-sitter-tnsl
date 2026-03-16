@@ -9,8 +9,8 @@
 
 // Whitespace and newlines
 const NL = new RustRegex("[\\r\\n]");
-const NL_ = new RustRegex("[\\r\\n]+");
-const _NL = optional(NL_);
+const NL_ = seq(NL, repeat(NL));
+const _NL = repeat(NL);
 const WS = new RustRegex("[\\s&&[^\\r\\n]]");
 const BLOCK_SEP = choice(";;", seq( ";/", _NL, "/;" ));
 
@@ -39,7 +39,7 @@ module.exports = grammar({
     source: $ => repeat($._mod_stmt),
 
     _mod_stmt: $ => choice(
-      NL_,
+      NL,
 
       $.struct,
       $.enum,
@@ -86,7 +86,7 @@ module.exports = grammar({
     // =================
 
     _method_stmt: $ => choice(
-      NL_,
+      NL,
 
       $.method_block,
     ),
@@ -127,7 +127,7 @@ module.exports = grammar({
     struct: $ => seq(
       "struct",
       field("name", $.identifier), _NL,
-      optional($.parameter_list), _NL,
+      optional(seq($.parameter_list, _NL)),
       $.struct_data_list
     ),
 
@@ -136,7 +136,7 @@ module.exports = grammar({
       optional(seq(
         $.type, _NL, $.identifier, _NL,
         repeat(seq(
-          ",", _NL, optional($.type), _NL, $.identifier, _NL
+          ",", _NL, optional(seq($.type, _NL)), $.identifier, _NL
         )),
       )),
       "}",
@@ -149,7 +149,7 @@ module.exports = grammar({
     enum: $ => seq(
       "enum",
       field("name", $.identifier), _NL,
-      optional($.type_list), _NL,
+      optional(seq($.type_list, _NL)),
       $.enum_list
     ),
 
@@ -168,13 +168,13 @@ module.exports = grammar({
     // Function definition
     // ===================
 
-    _func_stmt: $ => choice(
-      NL_,
+    _func_stmt: $ => prec(1, choice(
+      NL,
 
       seq($._stmt, NL),
 
       seq($.func_block, NL),
-    ),
+    )),
 
     func_head: $ => seq(
       field("name", $.identifier),
@@ -292,7 +292,7 @@ module.exports = grammar({
       optional(seq(
         $.type, _NL, $.identifier, _NL,
         repeat(seq(
-          ",", _NL, optional($.type), _NL, $.identifier, _NL,
+          ",", _NL, optional(seq($.type, _NL)), $.identifier, _NL,
         )),
       )),
       ")",
@@ -453,7 +453,6 @@ module.exports = grammar({
     ),
 
     _stmt: $ => choice(
-      NL,
       $.definition,
       $.value,
       $.control,
